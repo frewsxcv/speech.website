@@ -2,3 +2,5 @@
 __pycache__/
 .playwright-mcp/
 *.wav
+node_modules/
+dist/

@@ -7,11 +7,14 @@ models on [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/)
 ## Run locally
 
 ```sh
-python3 -m http.server 8124
+npm install
+npm run dev
 ```
 
-Then open http://localhost:8124. The browser downloads model weights from
-HuggingFace on first use and caches them.
+React + [MUI](https://mui.com/) frontend built with Vite; `npm run build` outputs
+static files to `dist/` (deployed to GitHub Pages by CI). The TTS libraries are
+loaded at runtime from CDNs (see `src/models.js` for why), and the browser
+downloads model weights from HuggingFace on first use and caches them.
 
 ## Models
 
