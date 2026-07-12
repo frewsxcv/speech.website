@@ -120,6 +120,83 @@ const MODELS = {
       };
     },
   },
+  piper: {
+    label: "Piper — huge voice catalog, ~65 MB per voice",
+    async load() {
+      const piper = await import("https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.4/+esm");
+      const curated = [
+        "en_US-hfc_female-medium", "en_US-lessac-medium", "en_US-amy-medium",
+        "en_US-ryan-high", "en_GB-alan-medium", "en_GB-alba-medium",
+        "de_DE-thorsten-medium", "fr_FR-siwis-medium", "es_ES-sharvard-medium",
+        "it_IT-paola-medium", "pt_BR-faber-medium", "ru_RU-irina-medium",
+        "uk_UA-ukrainian_tts-medium", "zh_CN-huayan-medium",
+      ];
+      const available = new Set((await piper.voices()).map((v) => v.key ?? v.id ?? v));
+      return {
+        voices: curated.filter((id) => available.has(id)).map((id) => ({ id, label: id })),
+        async generate(text, voice) {
+          // Each voice downloads on first use, then persists in origin-private FS.
+          const blob = await piper.predict({ text, voiceId: voice });
+          return { blob };
+        },
+      };
+    },
+  },
+  mms: {
+    label: "MMS (Meta) — 12 languages, ~36 MB each",
+    async load(onProgress) {
+      const { pipeline } = await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1/dist/transformers.min.js");
+      const langs = {
+        eng: "English", spa: "Spanish", fra: "French", deu: "German",
+        por: "Portuguese", rus: "Russian", kor: "Korean", hin: "Hindi",
+        ara: "Arabic", vie: "Vietnamese", ron: "Romanian", yor: "Yoruba",
+      };
+      const cache = {};
+      const get = async (lang) =>
+        cache[lang] ??= await pipeline("text-to-speech", `Xenova/mms-tts-${lang}`,
+          { dtype: "q8", device: "wasm", progress_callback: onProgress });
+      await get("eng");
+      return {
+        voices: Object.entries(langs).map(([id, label]) => ({ id, label })),
+        async generate(text, lang) {
+          const out = await (await get(lang))(text);
+          return { samples: out.audio, rate: out.sampling_rate };
+        },
+      };
+    },
+  },
+  oute: {
+    label: "OuteTTS-0.2-500M — LLM voices, ~300 MB" + (webgpu ? "" : " (slow without WebGPU)"),
+    async load() {
+      const { HFModelConfig_v1, InterfaceHF } =
+        await import("https://cdn.jsdelivr.net/npm/outetts@0.2.0/+esm");
+      const cfg = new HFModelConfig_v1({
+        model_path: "onnx-community/OuteTTS-0.2-500M",
+        language: "en",
+        // q4f16 breaks: outetts pins transformers.js 3.1.2, which predates
+        // Chrome's native Float16Array and mishandles fp16 tensors there.
+        dtype: "q4",
+        device: webgpu ? "webgpu" : "wasm",
+      });
+      const iface = await InterfaceHF({ model_version: "0.2", cfg });
+      const speakers = ["random", "en_male_1", "en_male_2", "en_male_3", "en_male_4",
+                        "en_female_1", "en_female_2"];
+      return {
+        voices: speakers.map((s) => ({ id: s, label: s.replaceAll("_", " ") })),
+        async generate(text, voice) {
+          let speaker = null;
+          if (voice !== "random") {
+            try { speaker = iface.load_default_speaker(voice); }
+            catch { speaker = iface.load_default_speaker(voice.replace(/^en_/, "")); }
+          }
+          const out = await iface.generate({
+            text, speaker, temperature: 0.1, repetition_penalty: 1.1, max_length: 4096,
+          });
+          return { blob: new Blob([out.to_wav("output.wav")], { type: "audio/wav" }) };
+        },
+      };
+    },
+  },
 };
 
 const engines = {};
@@ -188,9 +265,9 @@ $("go").onclick = async () => {
   $("status").textContent = "Generating…";
   const t0 = performance.now();
   try {
-    const { samples, rate } = await engine.generate(text, $("voice").value);
+    const out = await engine.generate(text, $("voice").value);
     const player = $("player");
-    player.src = URL.createObjectURL(toWavBlob(samples, rate));
+    player.src = URL.createObjectURL(out.blob ?? toWavBlob(out.samples, out.rate));
     player.hidden = false;
     player.play();
     $("status").textContent = `Done in ${((performance.now() - t0) / 1000).toFixed(1)}s`;

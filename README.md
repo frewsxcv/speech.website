@@ -22,3 +22,11 @@ Selectable from a dropdown:
 - **KittenTTS nano** via [kitten-tts-js](https://github.com/Algiras/kitten-tts-js) —
   smallest, 8 voices, ~24 MB. Loaded as plain source with an import map because CDN
   bundlers' Node polyfills defeat its environment detection (see comment in the HTML).
+- **Piper** via [@mintplex-labs/piper-tts-web](https://github.com/Mintplex-Labs/piper-tts-web) —
+  curated subset of its 900+ voice catalog across 10 languages; each voice is its own
+  ~65 MB download, cached in origin-private FS.
+- **MMS-TTS (Meta)** via [Transformers.js](https://huggingface.co/docs/transformers.js) —
+  one model per language (12 wired up), ~36 MB each, loaded lazily per language.
+- **OuteTTS-0.2-500M** via [outetts](https://www.npmjs.com/package/outetts) — LLM-based
+  TTS with speaker profiles, ~330 MB q4; slower than real time, WebGPU strongly
+  recommended. (q4f16 is broken in Chrome with native Float16Array — see comment.)
