@@ -12,7 +12,13 @@ const ORT_DIST = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/";
 
 export const MODELS = {
   kokoro: {
-    label: `Kokoro-82M — best quality, ~${webgpu ? 326 : 92} MB`,
+    name: "Kokoro-82M",
+    detail: `Best quality · 28 voices · ~${webgpu ? 326 : 92} MB`,
+    links: [
+      { label: "Model card", url: "https://huggingface.co/hexgrad/Kokoro-82M" },
+      { label: "ONNX weights", url: "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX" },
+      { label: "kokoro-js", url: "https://github.com/hexgrad/kokoro/tree/main/kokoro.js" },
+    ],
     async load(onProgress) {
       const { KokoroTTS } = await import(
         /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm"
@@ -33,7 +39,13 @@ export const MODELS = {
     },
   },
   kitten: {
-    label: "KittenTTS nano — smallest, ~24 MB",
+    name: "KittenTTS Nano",
+    detail: "Smallest · 8 voices · ~24 MB",
+    links: [
+      { label: "Model card", url: "https://huggingface.co/KittenML/kitten-tts-nano-0.8" },
+      { label: "KittenTTS", url: "https://github.com/KittenML/KittenTTS" },
+      { label: "kitten-tts-js", url: "https://github.com/Algiras/kitten-tts-js" },
+    ],
     async load() {
       // kitten-tts-js is loaded as plain source (not a CDN bundle): bundlers'
       // Node polyfills define process.versions.node, which tricks its
@@ -57,7 +69,14 @@ export const MODELS = {
     },
   },
   piper: {
-    label: "Piper — huge voice catalog, ~65 MB per voice",
+    name: "Piper",
+    detail: "Fast on CPU · 900+ voice catalog · ~65 MB per voice",
+    links: [
+      { label: "Project", url: "https://github.com/OHF-Voice/piper1-gpl" },
+      { label: "Voice catalog", url: "https://huggingface.co/rhasspy/piper-voices" },
+      { label: "Voice samples", url: "https://rhasspy.github.io/piper-samples/" },
+      { label: "piper-tts-web", url: "https://github.com/Mintplex-Labs/piper-tts-web" },
+    ],
     async load() {
       const piper = await import(
         /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.4/+esm"
@@ -81,7 +100,13 @@ export const MODELS = {
     },
   },
   mms: {
-    label: "MMS (Meta) — 12 languages, ~36 MB each",
+    name: "MMS-TTS (Meta)",
+    detail: "12 languages · ~36 MB each",
+    links: [
+      { label: "Model card", url: "https://huggingface.co/facebook/mms-tts" },
+      { label: "MMS docs", url: "https://huggingface.co/docs/transformers/model_doc/mms" },
+      { label: "ONNX weights", url: "https://huggingface.co/Xenova/mms-tts-eng" },
+    ],
     async load(onProgress) {
       const { pipeline } = await import(
         /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1/dist/transformers.min.js"
@@ -106,7 +131,12 @@ export const MODELS = {
     },
   },
   oute: {
-    label: "OuteTTS-0.2-500M — LLM voices, ~330 MB" + (webgpu ? "" : " (slow without WebGPU)"),
+    name: "OuteTTS-0.2-500M",
+    detail: "LLM speech, speaker profiles · ~330 MB" + (webgpu ? "" : " · slow without WebGPU"),
+    links: [
+      { label: "ONNX weights", url: "https://huggingface.co/onnx-community/OuteTTS-0.2-500M" },
+      { label: "OuteTTS", url: "https://github.com/edwko/OuteTTS" },
+    ],
     async load() {
       const { HFModelConfig_v1, InterfaceHF } = await import(
         /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/outetts@0.2.0/+esm"

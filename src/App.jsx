@@ -10,6 +10,7 @@ import {
   InputLabel,
   LinearProgress,
   Link,
+  ListItemText,
   MenuItem,
   Select,
   Stack,
@@ -115,9 +116,12 @@ export default function App() {
                 value={modelId}
                 disabled={busy}
                 onChange={(e) => selectModel(e.target.value)}
+                renderValue={(id) => MODELS[id].name}
               >
                 {Object.entries(MODELS).map(([id, m]) => (
-                  <MenuItem key={id} value={id}>{m.label}</MenuItem>
+                  <MenuItem key={id} value={id}>
+                    <ListItemText primary={m.name} secondary={m.detail} />
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -127,6 +131,17 @@ export default function App() {
               color={webgpu ? "success" : "default"}
               variant="outlined"
             />
+          </Stack>
+
+          <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap" sx={{ mt: -2 }}>
+            <Typography variant="body2" color="text.secondary">
+              {MODELS[modelId].detail}
+            </Typography>
+            {MODELS[modelId].links.map((l) => (
+              <Link key={l.url} href={l.url} target="_blank" rel="noopener" variant="body2">
+                {l.label} ↗
+              </Link>
+            ))}
           </Stack>
 
           {!engine && (
