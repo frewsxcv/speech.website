@@ -101,19 +101,14 @@ export default function App() {
       <CssBaseline />
       <Container maxWidth="sm" sx={{ py: 6 }}>
         <Stack spacing={3}>
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <Typography variant="h4" component="h1">
-              🗣️ speech.website
-            </Typography>
-            <IconButton
-              aria-label="About"
-              size="small"
-              onClick={() => setAboutOpen(true)}
-              sx={{ fontSize: "1.1rem", width: 32, height: 32 }}
-            >
-              ⓘ
-            </IconButton>
-          </Stack>
+          <IconButton
+            aria-label="About"
+            size="small"
+            onClick={() => setAboutOpen(true)}
+            sx={{ position: "fixed", top: 12, right: 12, fontSize: "1.1rem", width: 32, height: 32 }}
+          >
+            ⓘ
+          </IconButton>
 
           <FormControl fullWidth size="small">
             <InputLabel id="model-label">Model</InputLabel>
@@ -183,7 +178,7 @@ export default function App() {
         </Stack>
 
         <Dialog open={aboutOpen} onClose={() => setAboutOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>About</DialogTitle>
+          <DialogTitle>🗣️ speech.website</DialogTitle>
           <DialogContent>
             <Stack spacing={3}>
               <Typography variant="body2" color="text.secondary">
