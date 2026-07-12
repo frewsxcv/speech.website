@@ -3,6 +3,10 @@ import {
   Alert,
   Box,
   Button,
+  Card,
+  CardActionArea,
+  CardActions,
+  CardContent,
   Chip,
   Container,
   CssBaseline,
@@ -47,6 +51,7 @@ export default function App() {
   const [status, setStatus] = useState(null); // { severity, message }
   const [audioUrl, setAudioUrl] = useState(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const busy = loading || generating;
 
@@ -110,20 +115,21 @@ export default function App() {
             ⓘ
           </IconButton>
 
-          <FormControl fullWidth size="small">
-            <InputLabel id="model-label">Model</InputLabel>
-            <Select
-              labelId="model-label"
-              label="Model"
-              value={modelId}
-              disabled={busy}
-              onChange={(e) => selectModel(e.target.value)}
-            >
-              {Object.entries(MODELS).map(([id, m]) => (
-                <MenuItem key={id} value={id}>{m.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Button
+            variant="outlined"
+            fullWidth
+            disabled={busy}
+            onClick={() => setPickerOpen(true)}
+            sx={{ justifyContent: "space-between", textTransform: "none", py: 1.25, px: 2 }}
+          >
+            <Box sx={{ textAlign: "left" }}>
+              <Typography variant="caption" color="text.secondary" display="block">
+                Model
+              </Typography>
+              <Typography>{MODELS[modelId].name}</Typography>
+            </Box>
+            <Typography color="text.secondary">▾</Typography>
+          </Button>
 
           {!engine && (
             <Button variant="contained" onClick={loadModel} loading={loading}>
@@ -177,10 +183,47 @@ export default function App() {
           )}
         </Stack>
 
+        <Dialog open={pickerOpen} onClose={() => setPickerOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Choose a model</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2}>
+              {Object.entries(MODELS).map(([id, m]) => (
+                <Card
+                  key={id}
+                  variant="outlined"
+                  sx={id === modelId ? { borderColor: "primary.main", borderWidth: 2 } : undefined}
+                >
+                  <CardActionArea onClick={() => { selectModel(id); setPickerOpen(false); }}>
+                    <CardContent sx={{ pb: 1 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="subtitle1">{m.name}</Typography>
+                        {id === modelId && <Chip label="Selected" size="small" color="primary" />}
+                      </Stack>
+                      <Typography variant="body2" color="text.secondary">
+                        {m.detail}
+                      </Typography>
+                    </CardContent>
+                  </CardActionArea>
+                  <CardActions sx={{ px: 2, pt: 0, flexWrap: "wrap", gap: 1.5 }}>
+                    {m.links.map((l) => (
+                      <Link key={l.url} href={l.url} target="_blank" rel="noopener" variant="body2">
+                        {l.label} ↗
+                      </Link>
+                    ))}
+                  </CardActions>
+                </Card>
+              ))}
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setPickerOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
+
         <Dialog open={aboutOpen} onClose={() => setAboutOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>🗣️ speech.website</DialogTitle>
           <DialogContent>
-            <Stack spacing={3}>
+            <Stack spacing={2}>
               <Typography variant="body2" color="text.secondary">
                 Open text-to-speech models running entirely in this tab via{" "}
                 <Link href="https://onnxruntime.ai/docs/tutorials/web/" target="_blank" rel="noopener">
@@ -196,21 +239,9 @@ export default function App() {
                   component="span"
                 />
               </Typography>
-              {Object.entries(MODELS).map(([id, m]) => (
-                <Box key={id}>
-                  <Typography variant="subtitle2">{m.name}</Typography>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    {m.detail}
-                  </Typography>
-                  <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap">
-                    {m.links.map((l) => (
-                      <Link key={l.url} href={l.url} target="_blank" rel="noopener" variant="body2">
-                        {l.label} ↗
-                      </Link>
-                    ))}
-                  </Stack>
-                </Box>
-              ))}
+              <Typography variant="body2" color="text.secondary">
+                Details and reference links for each model live in the model picker.
+              </Typography>
               <Typography variant="body2" color="text.secondary">
                 <Link href="https://github.com/frewsxcv/speech.website" target="_blank" rel="noopener">
                   Source on GitHub ↗
