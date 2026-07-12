@@ -6,11 +6,15 @@ import {
   Chip,
   Container,
   CssBaseline,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
+  IconButton,
   InputLabel,
   LinearProgress,
   Link,
-  ListItemText,
   MenuItem,
   Select,
   Stack,
@@ -42,6 +46,7 @@ export default function App() {
   const [progress, setProgress] = useState(null); // 0..100, or null = indeterminate
   const [status, setStatus] = useState(null); // { severity, message }
   const [audioUrl, setAudioUrl] = useState(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const busy = loading || generating;
 
@@ -96,53 +101,34 @@ export default function App() {
       <CssBaseline />
       <Container maxWidth="sm" sx={{ py: 6 }}>
         <Stack spacing={3}>
-          <Box>
-            <Typography variant="h4" component="h1" gutterBottom>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="h4" component="h1">
               🗣️ speech.website
             </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Open text-to-speech models running entirely in this tab via{" "}
-              <Link href="https://onnxruntime.ai/docs/tutorials/web/">ONNX Runtime Web</Link>.
-              Weights download once, then cache. No server.
-            </Typography>
-          </Box>
-
-          <Stack direction="row" spacing={2} alignItems="center">
-            <FormControl fullWidth size="small">
-              <InputLabel id="model-label">Model</InputLabel>
-              <Select
-                labelId="model-label"
-                label="Model"
-                value={modelId}
-                disabled={busy}
-                onChange={(e) => selectModel(e.target.value)}
-                renderValue={(id) => MODELS[id].name}
-              >
-                {Object.entries(MODELS).map(([id, m]) => (
-                  <MenuItem key={id} value={id}>
-                    <ListItemText primary={m.name} secondary={m.detail} />
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Chip
-              label={webgpu ? "WebGPU" : "WASM"}
+            <IconButton
+              aria-label="About"
               size="small"
-              color={webgpu ? "success" : "default"}
-              variant="outlined"
-            />
+              onClick={() => setAboutOpen(true)}
+              sx={{ fontSize: "1.1rem", width: 32, height: 32 }}
+            >
+              ⓘ
+            </IconButton>
           </Stack>
 
-          <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap" sx={{ mt: -2 }}>
-            <Typography variant="body2" color="text.secondary">
-              {MODELS[modelId].detail}
-            </Typography>
-            {MODELS[modelId].links.map((l) => (
-              <Link key={l.url} href={l.url} target="_blank" rel="noopener" variant="body2">
-                {l.label} ↗
-              </Link>
-            ))}
-          </Stack>
+          <FormControl fullWidth size="small">
+            <InputLabel id="model-label">Model</InputLabel>
+            <Select
+              labelId="model-label"
+              label="Model"
+              value={modelId}
+              disabled={busy}
+              onChange={(e) => selectModel(e.target.value)}
+            >
+              {Object.entries(MODELS).map(([id, m]) => (
+                <MenuItem key={id} value={id}>{m.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           {!engine && (
             <Button variant="contained" onClick={loadModel} loading={loading}>
@@ -195,6 +181,52 @@ export default function App() {
             <audio src={audioUrl} controls autoPlay style={{ width: "100%" }} />
           )}
         </Stack>
+
+        <Dialog open={aboutOpen} onClose={() => setAboutOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>About</DialogTitle>
+          <DialogContent>
+            <Stack spacing={3}>
+              <Typography variant="body2" color="text.secondary">
+                Open text-to-speech models running entirely in this tab via{" "}
+                <Link href="https://onnxruntime.ai/docs/tutorials/web/" target="_blank" rel="noopener">
+                  ONNX Runtime Web
+                </Link>
+                . Weights download once, then cache. No server — your text never
+                leaves this device. Backend in use:{" "}
+                <Chip
+                  label={webgpu ? "WebGPU" : "WASM"}
+                  size="small"
+                  color={webgpu ? "success" : "default"}
+                  variant="outlined"
+                  component="span"
+                />
+              </Typography>
+              {Object.entries(MODELS).map(([id, m]) => (
+                <Box key={id}>
+                  <Typography variant="subtitle2">{m.name}</Typography>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    {m.detail}
+                  </Typography>
+                  <Stack direction="row" spacing={2} useFlexGap flexWrap="wrap">
+                    {m.links.map((l) => (
+                      <Link key={l.url} href={l.url} target="_blank" rel="noopener" variant="body2">
+                        {l.label} ↗
+                      </Link>
+                    ))}
+                  </Stack>
+                </Box>
+              ))}
+              <Typography variant="body2" color="text.secondary">
+                <Link href="https://github.com/frewsxcv/speech.website" target="_blank" rel="noopener">
+                  Source on GitHub ↗
+                </Link>
+              </Typography>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAboutOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
       </Container>
     </ThemeProvider>
   );
