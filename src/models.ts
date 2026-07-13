@@ -1,16 +1,51 @@
-// Model registry. Each loader returns
-//   { voices: [{id, label}], generate(text, voiceId) -> {samples, rate} | {blob} }.
+// Model registry. Each loader returns an Engine: { voices, generate(text, voiceId) }.
 //
 // The TTS libraries are imported at runtime from CDNs (with @vite-ignore so
 // Vite leaves the URLs alone) rather than bundled: several of them misdetect
 // their environment when a bundler's Node polyfills are present, and this way
-// each library is only fetched when its model is selected.
+// each library is only fetched when its model is selected. They ship no type
+// declarations, so each dynamic import resolves via the ambient wildcard
+// module in cdn-modules.d.ts and its exports are `any`.
 
 export const webgpu = !!navigator.gpu;
 
 const ORT_DIST = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/";
 
-export const MODELS = {
+export interface ModelLink {
+  label: string;
+  url: string;
+}
+
+export interface Voice {
+  id: string;
+  label: string;
+}
+
+export interface ProgressInfo {
+  status: string;
+  loaded?: number;
+  total?: number;
+}
+
+export type OnProgress = (p: ProgressInfo) => void;
+
+export type GenerateResult =
+  | { samples: Float32Array; rate: number; blob?: undefined }
+  | { blob: Blob; samples?: undefined; rate?: undefined };
+
+export interface Engine {
+  voices: Voice[];
+  generate(text: string, voice: string): Promise<GenerateResult>;
+}
+
+export interface ModelEntry {
+  name: string;
+  detail: string;
+  links: ModelLink[];
+  load(onProgress?: OnProgress): Promise<Engine>;
+}
+
+export const MODELS: Record<string, ModelEntry> = {
   kokoro: {
     name: "Kokoro-82M",
     detail: `Best quality · 28 voices · ~${webgpu ? 326 : 92} MB`,
@@ -29,7 +64,7 @@ export const MODELS = {
         progress_callback: onProgress,
       });
       return {
-        voices: Object.entries(tts.voices).map(([id, v]) =>
+        voices: Object.entries(tts.voices).map(([id, v]: [string, any]) =>
           ({ id, label: `${v.name} (${v.language} ${v.gender})` })),
         async generate(text, voice) {
           const audio = await tts.generate(text, { voice });
@@ -60,7 +95,7 @@ export const MODELS = {
       );
       const tts = await KittenTTS.from_pretrained("KittenML/kitten-tts-nano-0.8");
       return {
-        voices: tts.list_voices().map((name) => ({ id: name, label: name })),
+        voices: tts.list_voices().map((name: string) => ({ id: name, label: name })),
         async generate(text, voice) {
           const audio = await tts.generate(text, { voice });
           return { samples: audio.data, rate: audio.sampling_rate };
@@ -88,7 +123,7 @@ export const MODELS = {
         "it_IT-paola-medium", "pt_BR-faber-medium", "ru_RU-irina-medium",
         "uk_UA-ukrainian_tts-medium", "zh_CN-huayan-medium",
       ];
-      const available = new Set((await piper.voices()).map((v) => v.key ?? v.id ?? v));
+      const available = new Set((await piper.voices()).map((v: any) => v.key ?? v.id ?? v));
       return {
         voices: curated.filter((id) => available.has(id)).map((id) => ({ id, label: id })),
         async generate(text, voice) {
@@ -111,13 +146,13 @@ export const MODELS = {
       const { pipeline } = await import(
         /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1/dist/transformers.min.js"
       );
-      const langs = {
+      const langs: Record<string, string> = {
         eng: "English", spa: "Spanish", fra: "French", deu: "German",
         por: "Portuguese", rus: "Russian", kor: "Korean", hin: "Hindi",
         ara: "Arabic", vie: "Vietnamese", ron: "Romanian", yor: "Yoruba",
       };
-      const cache = {};
-      const get = async (lang) =>
+      const cache: Record<string, any> = {};
+      const get = async (lang: string) =>
         cache[lang] ??= await pipeline("text-to-speech", `Xenova/mms-tts-${lang}`,
           { dtype: "q8", device: "wasm", progress_callback: onProgress });
       await get("eng");
@@ -170,10 +205,10 @@ export const MODELS = {
   },
 };
 
-export function toWavBlob(samples, rate) {
+export function toWavBlob(samples: Float32Array, rate: number): Blob {
   const buf = new ArrayBuffer(44 + samples.length * 2);
   const v = new DataView(buf);
-  const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  const str = (o: number, s: string) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
   str(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); str(8, "WAVEfmt ");
   v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
   v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true);

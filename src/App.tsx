@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Alert,
   Box,
@@ -29,17 +29,21 @@ import {
   useMediaQuery,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import { MODELS, toWavBlob, webgpu } from "./models.js";
+import { MODELS, toWavBlob, webgpu, type Engine } from "./models";
 
 const ACCENT = "#1E56C7";
 
 const DEFAULT_TEXT =
   "Hello! This is a proof of concept running an open source text to speech model entirely inside the browser.";
 
-function formatTime(seconds) {
+function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00";
   const s = Math.max(0, Math.floor(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 function Logo() {
@@ -62,7 +66,16 @@ function Logo() {
   );
 }
 
-function OutlinedField({ label, value, onClick, disabled, accent, endAdornment }) {
+interface OutlinedFieldProps {
+  label: string;
+  value: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  accent?: boolean;
+  endAdornment?: ReactNode;
+}
+
+function OutlinedField({ label, value, onClick, disabled, accent, endAdornment }: OutlinedFieldProps) {
   return (
     <Box
       onClick={disabled ? undefined : onClick}
@@ -113,7 +126,7 @@ function OutlinedField({ label, value, onClick, disabled, accent, endAdornment }
   );
 }
 
-function Chevron({ color = "text.secondary" }) {
+function Chevron({ color = "text.secondary" }: { color?: string }) {
   return (
     <Box
       sx={{
@@ -128,8 +141,8 @@ function Chevron({ color = "text.secondary" }) {
   );
 }
 
-function AudioPlayer({ src }) {
-  const audioRef = useRef(null);
+function AudioPlayer({ src }: { src: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -140,8 +153,8 @@ function AudioPlayer({ src }) {
     audioRef.current?.play().catch(() => {});
   }, [src]);
 
-  const seek = (e) => {
-    if (!duration) return;
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!duration || !audioRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     audioRef.current.currentTime = ratio * duration;
@@ -183,7 +196,7 @@ function AudioPlayer({ src }) {
         style={{ display: "none" }}
       />
       <IconButton
-        onClick={() => (playing ? audioRef.current.pause() : audioRef.current.play())}
+        onClick={() => (playing ? audioRef.current?.pause() : audioRef.current?.play())}
         sx={{
           flexShrink: 0,
           width: 42,
@@ -281,6 +294,11 @@ function AudioPlayer({ src }) {
   );
 }
 
+interface StatusMessage {
+  severity: "success" | "error";
+  message: string;
+}
+
 export default function App() {
   const prefersDark = useMediaQuery("(prefers-color-scheme: dark)");
   const theme = useMemo(
@@ -296,23 +314,23 @@ export default function App() {
     [prefersDark],
   );
 
-  const enginesRef = useRef({});
+  const enginesRef = useRef<Record<string, Engine>>({});
   const [modelId, setModelId] = useState("kokoro");
-  const [engine, setEngine] = useState(null);
+  const [engine, setEngine] = useState<Engine | null>(null);
   const [voice, setVoice] = useState("");
   const [text, setText] = useState(DEFAULT_TEXT);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState(null); // 0..100, or null = indeterminate
-  const [status, setStatus] = useState(null); // { severity, message }
-  const [audioUrl, setAudioUrl] = useState(null);
+  const [progress, setProgress] = useState<number | null>(null); // 0..100, or null = indeterminate
+  const [status, setStatus] = useState<StatusMessage | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const busy = loading || generating;
   const sizeLabel = MODELS[modelId].detail.split(" · ").reverse().find((s) => s.startsWith("~"));
 
-  const selectModel = (id) => {
+  const selectModel = (id: string) => {
     setModelId(id);
     const cached = enginesRef.current[id] ?? null;
     setEngine(cached);
@@ -326,13 +344,13 @@ export default function App() {
     setStatus(null);
     try {
       const loaded = await MODELS[modelId].load((p) => {
-        if (p.status === "progress" && p.total) setProgress((p.loaded / p.total) * 100);
+        if (p.status === "progress" && p.total) setProgress((p.loaded! / p.total) * 100);
       });
       enginesRef.current[modelId] = loaded;
       setEngine(loaded);
       setVoice(loaded.voices[0].id);
     } catch (err) {
-      setStatus({ severity: "error", message: `Error loading model: ${err.message}` });
+      setStatus({ severity: "error", message: `Error loading model: ${errorMessage(err)}` });
     } finally {
       setLoading(false);
       setProgress(null);
@@ -346,13 +364,13 @@ export default function App() {
     const t0 = performance.now();
     try {
       const out = await engine.generate(text.trim(), voice);
-      setAudioUrl(URL.createObjectURL(out.blob ?? toWavBlob(out.samples, out.rate)));
+      setAudioUrl(URL.createObjectURL(out.blob ?? toWavBlob(out.samples!, out.rate!)));
       setStatus({
         severity: "success",
         message: `Done in ${((performance.now() - t0) / 1000).toFixed(1)}s`,
       });
     } catch (err) {
-      setStatus({ severity: "error", message: `Error: ${err.message}` });
+      setStatus({ severity: "error", message: `Error: ${errorMessage(err)}` });
     } finally {
       setGenerating(false);
     }
