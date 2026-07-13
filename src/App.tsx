@@ -329,6 +329,7 @@ export default function App() {
 
   const busy = loading || generating;
   const sizeLabel = MODELS[modelId].detail.split(" · ").reverse().find((s) => s.startsWith("~"));
+  const sizeMB = sizeLabel ? Number(sizeLabel.match(/[\d,]+/)?.[0].replace(/,/g, "")) : null;
 
   const selectModel = (id: string) => {
     setModelId(id);
@@ -344,20 +345,24 @@ export default function App() {
     setStatus(null);
     // Multi-file models (weights, tokenizer, config, ...) report progress
     // per file, restarting loaded/total from zero each time a new file
-    // starts; track every file's bytes separately and sum them, otherwise
-    // the bar visibly jumps backward whenever a new file begins.
-    const fileProgress = new Map<string, { loaded: number; total: number }>();
+    // starts. Summing each file's own loaded/total as files are discovered
+    // still isn't safe: the total file count is unknown upfront, so a
+    // small file can hit 100% before a much larger one even appears, and
+    // the instant that file's size is added the denominator jumps far more
+    // than the numerator, crashing the percentage back toward zero.
+    // Dividing by our own catalog size estimate (the same "~92 MB" shown
+    // in the UI) instead of a dynamically-discovered total sidesteps this:
+    // the denominator is fixed, and bytes downloaded only ever increase,
+    // so the bar can't regress.
+    const estimatedTotalBytes = sizeMB ? sizeMB * 1_000_000 : null;
+    const loadedByFile = new Map<string, number>();
     try {
       const loaded = await MODELS[modelId].load((p) => {
-        if (p.status !== "progress" || !p.total) return;
-        fileProgress.set(p.file ?? "", { loaded: p.loaded ?? 0, total: p.total });
+        if (p.status !== "progress" || !estimatedTotalBytes) return;
+        loadedByFile.set(p.file ?? "", p.loaded ?? 0);
         let loadedSum = 0;
-        let totalSum = 0;
-        for (const f of fileProgress.values()) {
-          loadedSum += f.loaded;
-          totalSum += f.total;
-        }
-        setProgress(totalSum ? (loadedSum / totalSum) * 100 : 0);
+        for (const bytes of loadedByFile.values()) loadedSum += bytes;
+        setProgress(Math.min(100, (loadedSum / estimatedTotalBytes) * 100));
       });
       enginesRef.current[modelId] = loaded;
       setEngine(loaded);
