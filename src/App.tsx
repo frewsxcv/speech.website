@@ -46,6 +46,20 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// Guards against a hung underlying call (observed with WebGPU inference
+// outside Chromium, where a broken execution provider can leave the
+// returned promise neither resolving nor rejecting) leaving the UI stuck
+// with a spinner forever.
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 function Logo() {
   const bars = [10, 18, 26, 16, 9];
   return (
@@ -381,7 +395,11 @@ export default function App() {
     setStatus(null);
     const t0 = performance.now();
     try {
-      const out = await engine.generate(text.trim(), voice);
+      const out = await withTimeout(
+        engine.generate(text.trim(), voice),
+        60_000,
+        "Timed out. This model's backend may not work in this browser — try switching models, or reload the page.",
+      );
       setAudioUrl(URL.createObjectURL(out.blob ?? toWavBlob(out.samples!, out.rate!)));
       setStatus({
         severity: "success",
