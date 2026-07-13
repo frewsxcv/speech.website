@@ -11,6 +11,29 @@ export const webgpu = !!navigator.gpu;
 
 const ORT_DIST = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/";
 
+// onnxruntime-web's WebGPU execution provider is still experimental and has
+// known gaps outside Chromium (observed on Safari: a broken internal
+// iteration crashes model loading by rejecting a promise *detached* from
+// the one the library returns to its caller, which a normal try/catch
+// around that returned promise can't see at all — it just hangs forever).
+// Race the load against the window's unhandledrejection event so a
+// detached failure surfaces here too, letting callers fall back to the
+// far more broadly-supported WASM backend instead of leaving the UI stuck.
+function guardDetachedRejection<T>(promise: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const onRejection = (e: PromiseRejectionEvent) => {
+      cleanup();
+      reject(e.reason);
+    };
+    const cleanup = () => window.removeEventListener("unhandledrejection", onRejection);
+    window.addEventListener("unhandledrejection", onRejection);
+    promise.then(
+      (v) => { cleanup(); resolve(v); },
+      (e) => { cleanup(); reject(e); },
+    );
+  });
+}
+
 export interface ModelLink {
   label: string;
   url: string;
@@ -64,11 +87,19 @@ export const MODELS: Record<string, ModelEntry> = {
       const { KokoroTTS } = await import(
         /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm"
       );
-      const tts = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
-        dtype: webgpu ? "fp32" : "q8",
-        device: webgpu ? "webgpu" : "wasm",
-        progress_callback: onProgress,
-      });
+      const loadWith = (useWebgpu: boolean) =>
+        KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+          dtype: useWebgpu ? "fp32" : "q8",
+          device: useWebgpu ? "webgpu" : "wasm",
+          progress_callback: onProgress,
+        });
+      let tts;
+      try {
+        tts = await guardDetachedRejection(loadWith(webgpu));
+      } catch (err) {
+        if (!webgpu) throw err;
+        tts = await loadWith(false);
+      }
       return {
         voices: Object.entries(tts.voices).map(([id, v]: [string, any]) =>
           ({ id, label: `${v.name} (${v.language} ${v.gender})` })),
@@ -90,15 +121,24 @@ export const MODELS: Record<string, ModelEntry> = {
       const { HFModelConfig_v1, InterfaceHF } = await import(
         /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/outetts@0.2.0/+esm"
       );
-      const cfg = new HFModelConfig_v1({
-        model_path: "onnx-community/OuteTTS-0.2-500M",
-        language: "en",
-        // q4f16 breaks: outetts pins transformers.js 3.1.2, which predates
-        // Chrome's native Float16Array and mishandles fp16 tensors there.
-        dtype: "q4",
-        device: webgpu ? "webgpu" : "wasm",
-      });
-      const iface = await InterfaceHF({ model_version: "0.2", cfg });
+      const loadWith = (useWebgpu: boolean) => {
+        const cfg = new HFModelConfig_v1({
+          model_path: "onnx-community/OuteTTS-0.2-500M",
+          language: "en",
+          // q4f16 breaks: outetts pins transformers.js 3.1.2, which predates
+          // Chrome's native Float16Array and mishandles fp16 tensors there.
+          dtype: "q4",
+          device: useWebgpu ? "webgpu" : "wasm",
+        });
+        return InterfaceHF({ model_version: "0.2", cfg });
+      };
+      let iface;
+      try {
+        iface = await guardDetachedRejection(loadWith(webgpu));
+      } catch (err) {
+        if (!webgpu) throw err;
+        iface = await loadWith(false);
+      }
       const speakers = ["random", "en_male_1", "en_male_2", "en_male_3", "en_male_4",
                         "en_female_1", "en_female_2"];
       return {
