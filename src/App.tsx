@@ -345,6 +345,28 @@ export default function App() {
   const sizeLabel = MODELS[modelId].detail.split(" · ").reverse().find((s) => s.startsWith("~"));
   const sizeMB = sizeLabel ? Number(sizeLabel.match(/[\d,]+/)?.[0].replace(/,/g, "")) : null;
 
+  // Safety net for bugs in the CDN-loaded TTS libraries that reject a
+  // *detached* promise instead of the one load()/generate() actually
+  // returns (observed on Safari: an internal helper throws inside an
+  // unawaited chain). Our own try/catch around those calls can't see
+  // that kind of failure, so without this, it surfaces only as an
+  // "Unhandled Promise Rejection" in devtools while the button spins
+  // forever. Treat any such rejection during a load/generate as fatal
+  // to that operation and unstick the UI immediately.
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  useEffect(() => {
+    const onUnhandledRejection = (e: PromiseRejectionEvent) => {
+      if (!busyRef.current) return;
+      setStatus({ severity: "error", message: `Error: ${errorMessage(e.reason)}` });
+      setLoading(false);
+      setGenerating(false);
+      setProgress(null);
+    };
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+    return () => window.removeEventListener("unhandledrejection", onUnhandledRejection);
+  }, []);
+
   const selectModel = (id: string) => {
     setModelId(id);
     const cached = enginesRef.current[id] ?? null;
