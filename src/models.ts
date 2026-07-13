@@ -23,6 +23,11 @@ export interface Voice {
 
 export interface ProgressInfo {
   status: string;
+  // Downloads are reported per source file, not in aggregate: a model with
+  // several files (weights, tokenizer, config, ...) restarts loaded/total
+  // from zero for each one, so callers must key on `file` to sum progress
+  // across files instead of reading loaded/total from a single event.
+  file?: string;
   loaded?: number;
   total?: number;
 }
@@ -45,6 +50,7 @@ export interface ModelEntry {
   load(onProgress?: OnProgress): Promise<Engine>;
 }
 
+// Ordered from highest to lowest speech quality, as reflected in the picker.
 export const MODELS: Record<string, ModelEntry> = {
   kokoro: {
     name: "Kokoro-82M",
@@ -73,32 +79,40 @@ export const MODELS: Record<string, ModelEntry> = {
       };
     },
   },
-  kitten: {
-    name: "KittenTTS Nano",
-    detail: "Smallest · 8 voices · ~24 MB",
+  oute: {
+    name: "OuteTTS-0.2-500M",
+    detail: "LLM speech, speaker profiles · ~330 MB" + (webgpu ? "" : " · slow without WebGPU"),
     links: [
-      { label: "Model card", url: "https://huggingface.co/KittenML/kitten-tts-nano-0.8" },
-      { label: "KittenTTS", url: "https://github.com/KittenML/KittenTTS" },
-      { label: "kitten-tts-js", url: "https://github.com/Algiras/kitten-tts-js" },
+      { label: "ONNX weights", url: "https://huggingface.co/onnx-community/OuteTTS-0.2-500M" },
+      { label: "OuteTTS", url: "https://github.com/edwko/OuteTTS" },
     ],
     async load() {
-      // kitten-tts-js is loaded as plain source (not a CDN bundle): bundlers'
-      // Node polyfills define process.versions.node, which tricks its
-      // environment detection into the fs-based code path. The import map in
-      // index.html supplies its bare dependency specifiers.
-      // ORT resolves its .wasm/.mjs helpers relative to the importing module,
-      // which breaks cross-CDN, so pin wasmPaths first.
-      const ort = await import(/* @vite-ignore */ `${ORT_DIST}ort.min.mjs`);
-      ort.env.wasm.wasmPaths = ORT_DIST;
-      const { KittenTTS } = await import(
-        /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/kitten-tts-js@0.1.2/src/index.browser.js"
+      const { HFModelConfig_v1, InterfaceHF } = await import(
+        /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/outetts@0.2.0/+esm"
       );
-      const tts = await KittenTTS.from_pretrained("KittenML/kitten-tts-nano-0.8");
+      const cfg = new HFModelConfig_v1({
+        model_path: "onnx-community/OuteTTS-0.2-500M",
+        language: "en",
+        // q4f16 breaks: outetts pins transformers.js 3.1.2, which predates
+        // Chrome's native Float16Array and mishandles fp16 tensors there.
+        dtype: "q4",
+        device: webgpu ? "webgpu" : "wasm",
+      });
+      const iface = await InterfaceHF({ model_version: "0.2", cfg });
+      const speakers = ["random", "en_male_1", "en_male_2", "en_male_3", "en_male_4",
+                        "en_female_1", "en_female_2"];
       return {
-        voices: tts.list_voices().map((name: string) => ({ id: name, label: name })),
+        voices: speakers.map((s) => ({ id: s, label: s.replaceAll("_", " ") })),
         async generate(text, voice) {
-          const audio = await tts.generate(text, { voice });
-          return { samples: audio.data, rate: audio.sampling_rate };
+          let speaker = null;
+          if (voice !== "random") {
+            try { speaker = iface.load_default_speaker(voice); }
+            catch { speaker = iface.load_default_speaker(voice.replace(/^en_/, "")); }
+          }
+          const out = await iface.generate({
+            text, speaker, temperature: 0.1, repetition_penalty: 1.1, max_length: 4096,
+          });
+          return { blob: new Blob([out.to_wav("output.wav")], { type: "audio/wav" }) };
         },
       };
     },
@@ -165,40 +179,32 @@ export const MODELS: Record<string, ModelEntry> = {
       };
     },
   },
-  oute: {
-    name: "OuteTTS-0.2-500M",
-    detail: "LLM speech, speaker profiles · ~330 MB" + (webgpu ? "" : " · slow without WebGPU"),
+  kitten: {
+    name: "KittenTTS Nano",
+    detail: "Smallest · 8 voices · ~24 MB",
     links: [
-      { label: "ONNX weights", url: "https://huggingface.co/onnx-community/OuteTTS-0.2-500M" },
-      { label: "OuteTTS", url: "https://github.com/edwko/OuteTTS" },
+      { label: "Model card", url: "https://huggingface.co/KittenML/kitten-tts-nano-0.8" },
+      { label: "KittenTTS", url: "https://github.com/KittenML/KittenTTS" },
+      { label: "kitten-tts-js", url: "https://github.com/Algiras/kitten-tts-js" },
     ],
     async load() {
-      const { HFModelConfig_v1, InterfaceHF } = await import(
-        /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/outetts@0.2.0/+esm"
+      // kitten-tts-js is loaded as plain source (not a CDN bundle): bundlers'
+      // Node polyfills define process.versions.node, which tricks its
+      // environment detection into the fs-based code path. The import map in
+      // index.html supplies its bare dependency specifiers.
+      // ORT resolves its .wasm/.mjs helpers relative to the importing module,
+      // which breaks cross-CDN, so pin wasmPaths first.
+      const ort = await import(/* @vite-ignore */ `${ORT_DIST}ort.min.mjs`);
+      ort.env.wasm.wasmPaths = ORT_DIST;
+      const { KittenTTS } = await import(
+        /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/kitten-tts-js@0.1.2/src/index.browser.js"
       );
-      const cfg = new HFModelConfig_v1({
-        model_path: "onnx-community/OuteTTS-0.2-500M",
-        language: "en",
-        // q4f16 breaks: outetts pins transformers.js 3.1.2, which predates
-        // Chrome's native Float16Array and mishandles fp16 tensors there.
-        dtype: "q4",
-        device: webgpu ? "webgpu" : "wasm",
-      });
-      const iface = await InterfaceHF({ model_version: "0.2", cfg });
-      const speakers = ["random", "en_male_1", "en_male_2", "en_male_3", "en_male_4",
-                        "en_female_1", "en_female_2"];
+      const tts = await KittenTTS.from_pretrained("KittenML/kitten-tts-nano-0.8");
       return {
-        voices: speakers.map((s) => ({ id: s, label: s.replaceAll("_", " ") })),
+        voices: tts.list_voices().map((name: string) => ({ id: name, label: name })),
         async generate(text, voice) {
-          let speaker = null;
-          if (voice !== "random") {
-            try { speaker = iface.load_default_speaker(voice); }
-            catch { speaker = iface.load_default_speaker(voice.replace(/^en_/, "")); }
-          }
-          const out = await iface.generate({
-            text, speaker, temperature: 0.1, repetition_penalty: 1.1, max_length: 4096,
-          });
-          return { blob: new Blob([out.to_wav("output.wav")], { type: "audio/wav" }) };
+          const audio = await tts.generate(text, { voice });
+          return { samples: audio.data, rate: audio.sampling_rate };
         },
       };
     },

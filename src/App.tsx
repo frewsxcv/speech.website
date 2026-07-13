@@ -34,7 +34,7 @@ import { MODELS, toWavBlob, webgpu, type Engine } from "./models";
 const ACCENT = "#1E56C7";
 
 const DEFAULT_TEXT =
-  "Hello! This is a proof of concept running an open source text to speech model entirely inside the browser.";
+  "Type anything here and hear it read aloud. Everything runs locally in your browser, so your text never leaves this device.";
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00";
@@ -342,9 +342,22 @@ export default function App() {
     setLoading(true);
     setProgress(null);
     setStatus(null);
+    // Multi-file models (weights, tokenizer, config, ...) report progress
+    // per file, restarting loaded/total from zero each time a new file
+    // starts; track every file's bytes separately and sum them, otherwise
+    // the bar visibly jumps backward whenever a new file begins.
+    const fileProgress = new Map<string, { loaded: number; total: number }>();
     try {
       const loaded = await MODELS[modelId].load((p) => {
-        if (p.status === "progress" && p.total) setProgress((p.loaded! / p.total) * 100);
+        if (p.status !== "progress" || !p.total) return;
+        fileProgress.set(p.file ?? "", { loaded: p.loaded ?? 0, total: p.total });
+        let loadedSum = 0;
+        let totalSum = 0;
+        for (const f of fileProgress.values()) {
+          loadedSum += f.loaded;
+          totalSum += f.total;
+        }
+        setProgress(totalSum ? (loadedSum / totalSum) * 100 : 0);
       });
       enginesRef.current[modelId] = loaded;
       setEngine(loaded);
@@ -586,8 +599,8 @@ export default function App() {
               <Link href="https://onnxruntime.ai/docs/tutorials/web/" target="_blank" rel="noopener">
                 ONNX Runtime Web
               </Link>
-              . Weights download once, then cache. No server — your text never
-              leaves this device. Backend in use:{" "}
+              . Weights download once, then cache. No server, so your text
+              never leaves this device. Backend in use:{" "}
               <Chip
                 label={webgpu ? "WebGPU" : "WASM"}
                 size="small"
